@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.env
+
+# Secrets
+service-account-key.json
+*.key
+
+# Data
+# This single line ignores all videos, frames, and outputs.
+/data/
+
+# OS
+.DS_Store
+Thumbs.db
