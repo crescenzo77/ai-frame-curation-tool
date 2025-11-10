@@ -323,14 +323,14 @@ def main():
                     selected_indices = seen_source_frame_indices[current_source_video]
                     selected_count = len(selected_indices)
                     
-                    if selected_count == 3:
+                    if selected_count == 5:
                         # --- 4th Frame Test ---
                         total_frames = video_manifest[current_source_video]
                         # Ensure total_frames is not zero to avoid division error
                         if total_frames == 0:
                             continue # Cannot perform test, reject
                             
-                        avg_index = sum(selected_indices) / 3
+                        avg_index = sum(selected_indices) / 5
                         midpoint = total_frames / 2
                         current_index = item["frame_index"]
                         
@@ -347,8 +347,8 @@ def main():
                         if not test_passed:
                             continue # Reject: Failed temporal spread test
                     
-                    elif selected_count >= 4:
-                        continue # Reject: Hard cap of 4 images reached
+                    elif selected_count >= 6:
+                        continue # Reject: Hard cap of 6 images reached
                 
                 # --- ACCEPT ---
                 # Image passed all filters for its category!

@@ -11,7 +11,7 @@ It automatically sifts, sorts, scores, and de-duplicates images to find the best
 * **3-Stage De-duplication Gauntlet (v3):** Ensures a high-variety dataset by combining three filters:
     * **Global pHash:** A strict filter to remove near-identical twins.
     * **Intra-Source pHash:** A laxer filter to ensure visual variety from the *same* video.
-    * **Temporal Quota:** A 4-frame hard cap for body categories that forces selections to be from different times in the video (e.g., 2 from the start, 2 from the end).
+    * **Temporal Quota:** A 6-frame hard cap for body categories that forces selections to be from different times in the video (e.g., 2 from the start, 2 from the end).
 * **Automated Captioning:** Includes scripts to auto-caption the final dataset using the Gemini or Vertex AI APIs.
 * **Containerized & Portable:** The entire environment (OpenCV, MediaPipe, PyTorch) is containerized with Docker, making it 100% reproducible.
 
