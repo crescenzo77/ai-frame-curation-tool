@@ -19,17 +19,16 @@ from vertexai.generative_models import (
 # --- Configuration ---
 PROJECT_ID = "your-gcp-project-id"
 LOCATION = "us-central1"
-MODEL_ID = "gemini-1.5-pro-latest" # Using a modern model
+MODEL_ID = "gemini-1.5-pro-latest"
 IMAGE_FOLDER = Path("/projects/sorted_output/a_face_n_hair_top60_v4")
 TRIGGER_PREFIX = "my_trigger_token, "
 
 API_PROMPT = """You are a captioning expert for AI model training.
 Describe this image objectively. Focus on the person, clothing, pose, action, and any visible, distinct features.
 Be concise and factual. Do not use the subject's name.
-Example: 'a woman with long brown hair, wearing a pink cardigan, looking over her shoulder'"""
+Example: 'a person with long brown hair, wearing a pink cardigan, looking over their shoulder'"""
 
 # --- Disable all safety filters ---
-# (This is common for training data pipelines on private, curated datasets)
 SAFETY_SETTINGS = {
     HarmCategory.HARM_CATEGORY_HATE_SPEECH: SafetySetting.HarmBlockThreshold.BLOCK_NONE,
     HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: SafetySetting.HarmBlockThreshold.BLOCK_NONE,
@@ -94,11 +93,15 @@ def main():
 
             # 4. Extract and save
             caption = response.text.strip()
+
+            # --- GENDER-NEUTRAL REPLACEMENT ---
             caption = caption.replace("a woman ", "", 1)
             caption = caption.replace("a photo of a woman ", "", 1)
+            caption = caption.replace("a man ", "", 1)
+            caption = caption.replace("a photo of a man ", "", 1)
             caption = caption.replace("a person ", "", 1)
             caption = caption.replace("a photo of a person ", "", 1)
-
+            # --- END FIX ---
 
             final_caption = TRIGGER_PREFIX + caption
             txt_path.write_text(final_caption)

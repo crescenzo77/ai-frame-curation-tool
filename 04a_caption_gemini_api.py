@@ -1,9 +1,5 @@
 import sys
 import os
-
-# Force Python to look in your local install directory
-# sys.path.append(os.path.expanduser('~/.local/lib/python3.10/site-packages'))
-
 import google.genai as genai
 from pathlib import Path
 from tqdm import tqdm
@@ -12,14 +8,14 @@ import time
 
 # --- Configuration ---
 API_KEY = "YOUR_API_KEY_GOES_HERE"
-MODEL_ID = "gemini-1.5-flash-latest" # This model is correct
+MODEL_ID = "gemini-1.5-flash-latest"
 IMAGE_FOLDER = Path("/projects/sorted_output/a_face_n_hair_top60_v4")
 TRIGGER_PREFIX = "my_trigger_token, "
 
-API_PROMPT = """You are a captioning expert for AI model training. 
-Describe this image objectively. Focus on the person, clothing, pose, action, and any visible, distinct features. 
-Be concise and factual. Do not use the name 'ohwx_brutus man'.
-Example: 'a man with long brown beard, wearing a scarlet and gray hoodie and bluejeans, looking over his` shoulder'"""
+API_PROMPT = """You are a captioning expert for AI model training.
+Describe this image objectively. Focus on the person, clothing, pose, action, and any visible, distinct features.
+Be concise and factual. Do not use the subject's name.
+Example: 'a person with long brown hair, wearing a pink cardigan, looking over their shoulder'"""
 
 # --- Main Execution ---
 def main():
@@ -30,15 +26,9 @@ def main():
         return
 
     try:
-        # --- THIS IS THE FIX ---
-        # 1. Configure the genai module directly
         genai.configure(api_key=API_KEY)
-        
-        # 2. Create a GenerativeModel object
         model = genai.GenerativeModel(MODEL_ID)
         print(f"Successfully configured Gemini API model: {MODEL_ID}")
-        # --- END FIX ---
-        
     except Exception as e:
         print(f"Error configuring API: {e}")
         print("Please check your API_KEY and internet connection.")
@@ -66,18 +56,20 @@ def main():
         try:
             image = PIL.Image.open(img_path)
             
-            # --- THIS IS THE FIX ---
-            # 3. Call 'generate_content' on the model object, not client.models
             response = model.generate_content(
                 contents=[image, API_PROMPT] # Use 'contents' (plural)
             )
-            # --- END FIX ---
             
             caption = response.text.strip()
             
-            # Clean and save
+            # --- GENDER-NEUTRAL REPLACEMENT ---
             caption = caption.replace("a woman ", "", 1)
             caption = caption.replace("a photo of a woman ", "", 1)
+            caption = caption.replace("a man ", "", 1)
+            caption = caption.replace("a photo of a man ", "", 1)
+            caption = caption.replace("a person ", "", 1)
+            caption = caption.replace("a photo of a person ", "", 1)
+            # --- END FIX ---
             
             final_caption = TRIGGER_PREFIX + caption
             txt_path.write_text(final_caption)
@@ -96,14 +88,18 @@ def main():
                 # Retry this image
                 try:
                     image = PIL.Image.open(img_path)
-                    # --- THIS IS THE FIX (for retry) ---
                     response = model.generate_content(
                         contents=[image, API_PROMPT]
                     )
-                    # --- END FIX ---
                     caption = response.text.strip()
+                    # --- GENDER-NEUTRAL REPLACEMENT (for retry) ---
                     caption = caption.replace("a woman ", "", 1)
                     caption = caption.replace("a photo of a woman ", "", 1)
+                    caption = caption.replace("a man ", "", 1)
+                    caption = caption.replace("a photo of a man ", "", 1)
+                    caption = caption.replace("a person ", "", 1)
+                    caption = caption.replace("a photo of a person ", "", 1)
+                    # --- END FIX ---
                     final_caption = TRIGGER_PREFIX + caption
                     txt_path.write_text(final_caption)
                 except Exception as e2:
@@ -113,7 +109,6 @@ def main():
 
     print("\n--- Process Complete ---")
     print(f"All images in {IMAGE_FOLDER} have been captioned with the Gemini API.")
-    print("Your next step is to manually review the new, high-quality .txt files.")
 
 if __name__ == "__main__":
     main()
