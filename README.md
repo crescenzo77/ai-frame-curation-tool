@@ -8,7 +8,10 @@ It automatically sifts, sorts, scores, and de-duplicates images to find the *bes
 
 * **Automated Sorting:** Uses MediaPipe (Face Detection, Pose) to sort 1000s of images into categories like `face`, `upper_body`, and `full_body` in minutes.
 * **Advanced Focus Scoring:** Implements a "v4" scoring model that uses 3 separate ML models (Holistic, Selfie Segmentation, Pose) to find images where the *subject's face is the sharpest object in the frame*, penalizing images with blurry faces but sharp backgrounds.
-* **Dynamic De-duplication:** A "v3" two-stage pHash filter ensures a high-variety final dataset. It uses a strict *global* filter (to remove near-identical images) and a separate *intra-source* filter (to select visually distinct frames from the same video).
+* **3-Stage De-duplication Gauntlet:** Ensures a high-variety dataset by combining three filters:
+    1.  **Global pHash:** A strict filter to remove near-identical twins.
+    2.  **Intra-Source pHash:** A laxer filter to ensure visual variety from the same video.
+    3.  **Temporal Quota (New!):** A 4-frame hard cap for `body` categories that forces selections to be from different *times* in the video (e.g., 2 from the start, 2 from the end).
 * **Automated Captioning:** Includes scripts to auto-caption the final dataset using the Gemini or Vertex AI APIs.
 * **Containerized & Portable:** The entire environment (OpenCV, MediaPipe, PyTorch) is containerized with Docker, making it 100% reproducible.
 
@@ -24,11 +27,13 @@ The scripts are numbered in the order you should run them.
     * **Input:** The 240,000+ images in `/data/source_images`.
     * **Output:** Images are sorted by pose/shot type into `/data/sorted_output` (e.g., `a_face_n_hair`, `b_upper_body`). Reports results to TensorBoard.
 
-3.  **`03_score_and_rank_v2.py`**:
+3.  **`03_score_and_rank_v3.py`**:
     * **This is the core logic.**
     * **Input:** The sorted images (e.g., 16,000 images in `a_face_n_hair`).
-    * **Process:** Runs the v4 "Focus-Weighted" scoring and v3 "Dynamic De-duplication" filter on all candidates.
-    * **Output:** The **Top 60** best, most unique images for each category, saved to new folders (e.g., `/data/sorted_output/a_face_n_hair_top60_v4`).
+    * **Process:** Runs the v4 "Focus-Weighted" scoring and the new "3-Stage" de-duplication filter on all candidates.
+        * `a_face_n_hair` uses a 2-stage pHash filter (which works well for faces).
+        * `b_upper_body` & `c_full_body` use the 3-stage pHash + Temporal Quota filter to force timeline variety.
+    * **Output:** The **Top 60** best, most unique images for each category, saved to new folders (e.g., `/data/sorted_output/a_face_n_hair_top60_v4_temporal`).
 
 4.  **`04_caption_dataset_*.py`**:
     * **Input:** The final "Top 60" folders.
@@ -86,7 +91,7 @@ The scripts are numbered in the order you should run them.
     python3 02_sort_dataset.py
 
     # Step 3: Score and rank to find the Top 60 (The "magic" step)
-    python3 03_score_and_rank_v2.py
+    python3 03_score_and_rank_v3.py
 
     # Step 4: Caption your final dataset
     # Edit the script first to set your API key and target folder
