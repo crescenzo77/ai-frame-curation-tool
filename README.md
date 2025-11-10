@@ -20,8 +20,12 @@ The v2 sorter uses LDM, L2Net, LoFTR, automatic U-Body, upper-body, sorts, score
 
 ### Quick Start:
 
-* Clone the repo: `git clone https://github.com/crescendoai/frame-curation-tool`
-* `pip install -r requirements.txt`
+* Clone the repo:     ```bash
+git clone https://github.com/crescendoai/frame-curation-tool
+    ```
+*     ```bash
+pip install -r requirements.txt    ```
+
 * Add your secrets (Google service account key file) to the root of the project. Never commit this file.
 * Place your .mp4, .mov, etc. files into the `datastore/videos_folder_1`.
 * Run the Docker image (or start the Python script) and start the Gradio/WebUI by navigating to your Docker container IP (or `127.0.0.1:7860`).
