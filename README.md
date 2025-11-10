@@ -1,6 +1,7 @@
 # README
 
 Note: this project is working under the premise that each video file is an individual scene.
+
 The v2 sorter uses LDM, L2Net, LoFTR, automatic U-Body, upper-body, sorts, scores, and de-duplicates images to find the best available frames, solving common dataset problems like poor face focus and false faces.
 
 ### Key features:
