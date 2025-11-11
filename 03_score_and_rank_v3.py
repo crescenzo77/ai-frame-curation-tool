@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import cv2
 import mediapipe as mp
 import numpy as np
@@ -13,14 +15,11 @@ from collections import defaultdict
 import re
 
 # --- Configuration ---
-
-# 1. MediaPipe Models
 mp_pose = mp.solutions.pose
 mp_holistic = mp.solutions.holistic
 mp_selfie_segmentation = mp.solutions.selfie_segmentation
 PoseLandmark = mp_pose.PoseLandmark
 
-# 2. v4 Weights (Heavily biased toward new focus metrics)
 WEIGHTS = {
     "pose": 0.20,
     "brightness": 0.10,
@@ -28,31 +27,26 @@ WEIGHTS = {
     "focus_score": 0.35
 }
 
-# 3. De-duplication Filters
 TOP_N_IMAGES = 60
-GLOBAL_HASH_THRESHOLD = 3      # Very strict: rejects near-identical images
-INTRA_SOURCE_HASH_THRESHOLD = 10 # Lax: allows visual variety from same video
+GLOBAL_HASH_THRESHOLD = 3
+INTRA_SOURCE_HASH_THRESHOLD = 10
 
-# 4. Scoring "Goldilocks" values
 IDEAL_BRIGHTNESS = 128.0
 VISIBILITY_THRESHOLD = 0.5
-GAUSS_MU = 1.0   # Peak of the bell curve (ideal ratio)
-GAUSS_SIGMA = 0.25 # Steepness of the bell curve
+GAUSS_MU = 1.0
+GAUSS_SIGMA = 0.25
 
-# 5. Paths (relative to /projects in Docker)
 BASE_PROJECT_DIR = Path("/projects")
 SORTED_OUTPUT_DIR = BASE_PROJECT_DIR / "sorted_output"
 OUTPUT_JSON_FILE = BASE_PROJECT_DIR / "scoring_results_v3.json"
-OUTPUT_FOLDER_SUFFIX = f"_top{TOP_N_IMAGES}_v4_temporal" # v4 scoring, temporal logic
+OUTPUT_FOLDER_SUFFIX = f"_top{TOP_N_IMAGES}_v4_temporal"
 
-# --- Categories to process (Must match 02_sort_dataset.py) ---
 CATEGORIES = {
     "a_face_n_hair": SORTED_OUTPUT_DIR / "a_face_n_hair",
     "b_upper_body": SORTED_OUTPUT_DIR / "b_upper_body",
     "c_full_body": SORTED_OUTPUT_DIR / "c_full_body"
 }
-
-# --- New Helper Functions ---
+# --- End Configuration ---
 
 def gaussian_score(x, mu, sigma):
     """ (Unchanged) Applies a Gaussian bell curve. """
@@ -60,21 +54,21 @@ def gaussian_score(x, mu, sigma):
 
 def get_source_video(filename):
     """ (Unchanged) Extracts source video name. """
-    # Assumes "VideoName_frame_000123.jpg" format
-    return filename.split("_frame_")[0]
+    try:
+        return filename.split("_frame_")[0]
+    except IndexError:
+        # Fallback for filenames that might not match
+        return "unknown_source"
 
 def get_frame_index(filename):
     """
-    NEW: Extracts the frame index (e.g., 123) from a filename
+    Extracts the frame index (e.g., 123) from a filename
     (e.g., "VideoName_frame_000123.jpg").
     """
-    # Regex to find the number after "_frame_" and before ".jpg"
     match = re.search(r'_frame_(\d+)\.(jpg|jpeg|png|webp)$', filename, re.IGNORECASE)
     if match:
         return int(match.group(1))
-    return 0 # Default if pattern fails
-
-# --- Scoring Functions (Unchanged) ---
+    return 0
 
 def get_brightness(image_gray):
     """ Scores brightness, ideal is 128. """
@@ -109,10 +103,9 @@ def get_pose_score(pose_landmarks, category_name):
 
 def process_image_v4(img_path, image_rgb, image_gray, holistic, segmentation, pose, category_name):
     """
-    (MODIFIED) Runs the full v4 scoring pipeline.
-    Now also parses and returns 'frame_index'.
+    Runs the full v4 scoring pipeline.
+    Parses and returns 'frame_index'.
     """
-    # 1. Run all 3 MediaPipe models
     try:
         pose_results = pose.process(image_rgb)
         holistic_results = holistic.process(image_rgb)
@@ -121,20 +114,15 @@ def process_image_v4(img_path, image_rgb, image_gray, holistic, segmentation, po
         print(f"Warning: MediaPipe error on {img_path.name}: {e}")
         return None
 
-    # 2. Get standard scores
     S_brightness = get_brightness(image_gray)
     S_pose = get_pose_score(pose_results.pose_landmarks, category_name)
     
-    # 3. v4 Focus-Weighted Scoring
     raw_face_sharpness = 0.0
     raw_body_sharpness = 0.0
-    focus_ratio = 1.0 # Default to 1.0 (perfect) if data is missing
+    focus_ratio = 1.0 
 
     try:
-        # Get global Laplacian "edge map"
         laplacian_map = cv2.Laplacian(image_gray, cv2.CV_64F)
-
-        # 3a. Create Face Mask
         if holistic_results.face_landmarks:
             face_landmarks = holistic_results.face_landmarks.landmark
             face_points = np.array([[int(p.x * image_rgb.shape[1]), int(p.y * image_rgb.shape[0])] for p in face_landmarks])
@@ -147,7 +135,6 @@ def process_image_v4(img_path, image_rgb, image_gray, holistic, segmentation, po
             if face_pixels.size > 0:
                 raw_face_sharpness = np.var(face_pixels)
 
-            # 3b. Create Body-Only Mask
             person_mask_raw = seg_results.segmentation_mask
             person_mask = (person_mask_raw > 0.5).astype(np.uint8) * 255
             body_only_mask = cv2.subtract(person_mask, face_mask)
@@ -156,7 +143,6 @@ def process_image_v4(img_path, image_rgb, image_gray, holistic, segmentation, po
             if body_pixels.size > 0:
                 raw_body_sharpness = np.var(body_pixels)
 
-            # 3c. Calculate Focus Ratio
             if raw_body_sharpness > 1e-6:
                 focus_ratio = raw_face_sharpness / raw_body_sharpness
             elif raw_face_sharpness > 1e-6:
@@ -164,7 +150,6 @@ def process_image_v4(img_path, image_rgb, image_gray, holistic, segmentation, po
     except Exception as e:
         pass # This can fail (e.g., no face), default scores are fine
         
-    # 4. Final Scores
     S_focus_score = gaussian_score(focus_ratio, GAUSS_MU, GAUSS_SIGMA)
     image_pil = Image.fromarray(image_rgb)
     phash = str(imagehash.phash(image_pil))
@@ -174,32 +159,24 @@ def process_image_v4(img_path, image_rgb, image_gray, holistic, segmentation, po
         "path": str(img_path),
         "phash": phash,
         "source_video": get_source_video(img_path.name),
-        "frame_index": get_frame_index(img_path.name), # <-- NEW
+        "frame_index": get_frame_index(img_path.name),
         "scores": {
-            "S_brightness": S_brightness,
-            "S_pose": S_pose,
-            "S_focus_score": S_focus_score,
-            "raw_face_sharpness": raw_face_sharpness,
-            "raw_body_sharpness": raw_body_sharpness,
-            "focus_ratio": focus_ratio
+            "S_brightness": S_brightness, "S_pose": S_pose,
+            "S_focus_score": S_focus_score, "raw_face_sharpness": raw_face_sharpness,
+            "raw_body_sharpness": raw_body_sharpness, "focus_ratio": focus_ratio
         }
     }
 
-# --- Main Execution (Heavily Modified) ---
 def main():
     print("🚀 Starting v4 Scoring & v3+Temporal De-duplication Process...")
     all_final_results = {}
 
-    # --- NEW: Pass 0 - Build Video Manifest ---
-    # We must scan all images first to find the total_frames for each video.
     print("Building video manifest (Pass 0)...")
     video_manifest = defaultdict(int)
     all_image_files = []
     
-    # Scan all configured categories to find all images
     for cat_path in CATEGORIES.values():
         if cat_path.is_dir():
-            # Scan for all valid image extensions
             for ext in ("*.jpg", "*.jpeg", "*.png", "*.webp"):
                  all_image_files.extend(list(cat_path.glob(ext)))
     
@@ -210,14 +187,11 @@ def main():
     for img_path in tqdm(all_image_files, desc="Scanning frames"):
         source_video = get_source_video(img_path.name)
         frame_index = get_frame_index(img_path.name)
-        # Store the highest frame index found for each video
         if frame_index > video_manifest[source_video]:
             video_manifest[source_video] = frame_index
     
     print(f"Manifest built. Found {len(video_manifest)} source videos.")
-    # --- End Pass 0 ---
 
-    # --- Start Main Processing ---
     with mp_pose.Pose(static_image_mode=True, model_complexity=1, min_detection_confidence=0.5) as pose, \
          mp_holistic.Holistic(static_image_mode=True, model_complexity=1, min_detection_confidence=0.5) as holistic, \
          mp_selfie_segmentation.SelfieSegmentation(model_selection=0) as segmentation:
@@ -235,7 +209,6 @@ def main():
                 print("No images found in this category. Skipping.")
                 continue
 
-            # --- Pass 1: Gather all scores ---
             all_category_scores = []
             skipped_count = 0
             for img_path in tqdm(image_files, desc=f"Scoring {cat_name} (Pass 1)"):
@@ -243,9 +216,12 @@ def main():
                     image = cv2.imread(str(img_path))
                     if image is None: 
                         skipped_count += 1; continue
-                    h, w, _ = image.shape
-                    if h != 1024 or w != 1024:
-                        skipped_count += 1; continue
+                    
+                    # --- MODIFICATION: The 1024x1024 gate is REMOVED ---
+                    # h, w, _ = image.shape
+                    # if h != 1024 or w != 1024:
+                    #     skipped_count += 1; continue
+                    # --- END MODIFICATION ---
                         
                     image_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
                     image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
@@ -257,15 +233,16 @@ def main():
                     print(f"Error processing {img_path}: {e}")
             
             if skipped_count > 0:
-                print(f"INFO: Skipped {skipped_count} images (corrupt or not 1024x1024).")
+                # Clarified the message now that the 1024 gate is gone
+                print(f"INFO: Skipped {skipped_count} corrupt images.")
             if not all_category_scores:
                 print("No valid images scored in this category. Skipping.")
                 continue
 
-            # --- Pass 2: Normalize and Calculate Final Score ---
             print(f"Normalizing {len(all_category_scores)} images (Pass 2)...")
+            # Find the max raw face sharpness for normalization
             max_face_sharpness = max(item['scores']['raw_face_sharpness'] for item in all_category_scores)
-            if max_face_sharpness == 0: max_face_sharpness = 1.0
+            if max_face_sharpness == 0: max_face_sharpness = 1.0 # Avoid div by zero
 
             for item in all_category_scores:
                 S_abs_face_sharp = item['scores']['raw_face_sharpness'] / max_face_sharpness
@@ -280,15 +257,12 @@ def main():
 
             all_category_scores.sort(key=lambda x: x["final_score"], reverse=True)
             
-            # --- Pass 3: NEW 3-Stage De-duplication Filter Gauntlet ---
             print(f"Building unique top {TOP_N_IMAGES} list (3-Stage Filter)...")
             top_n_items = []
             seen_global_hashes = set()
             seen_source_hashes = defaultdict(list)
-            # --- NEW: Track selected frame indices for temporal filter ---
             seen_source_frame_indices = defaultdict(list)
             
-            # Check if this is the special-case face category
             is_face_category = (cat_name == "a_face_n_hair")
             if is_face_category:
                 print("INFO: Applying 2-stage pHash filter for 'face' category.")
@@ -297,72 +271,53 @@ def main():
 
             for item in tqdm(all_category_scores, desc=f"Filtering unique {cat_name}"):
                 if len(top_n_items) >= TOP_N_IMAGES:
-                    break # We found our Top 60
-
+                    break
                 current_hash = imagehash.hex_to_hash(item["phash"])
                 current_source_video = item["source_video"]
                 
-                # --- Filter 1: Global (Strict) ---
+                # Filter 1: Global (Strict)
                 is_global_dupe = False
                 for seen_hash in seen_global_hashes:
                     if (current_hash - seen_hash) < GLOBAL_HASH_THRESHOLD:
                         is_global_dupe = True; break
-                if is_global_dupe:
-                    continue # Reject: Too similar to any selected image
+                if is_global_dupe: continue 
 
-                # --- Filter 2: Intra-Source (Lax) ---
+                # Filter 2: Intra-Source (Lax)
                 is_source_dupe = False
                 for seen_hash in seen_source_hashes[current_source_video]:
                     if (current_hash - seen_hash) < INTRA_SOURCE_HASH_THRESHOLD:
                         is_source_dupe = True; break
-                if is_source_dupe:
-                    continue # Reject: Not different enough from its own video
+                if is_source_dupe: continue
                 
-                # --- Filter 3: Temporal Quota (for Body categories only) ---
+                # Filter 3: Temporal Quota (for Body categories only)
                 if not is_face_category:
                     selected_indices = seen_source_frame_indices[current_source_video]
                     selected_count = len(selected_indices)
                     
                     if selected_count == 5:
-                        # --- 4th Frame Test ---
                         total_frames = video_manifest[current_source_video]
-                        # Ensure total_frames is not zero to avoid division error
-                        if total_frames == 0:
-                            continue # Cannot perform test, reject
-                            
+                        if total_frames == 0: continue # Cannot perform test, reject
                         avg_index = sum(selected_indices) / 5
                         midpoint = total_frames / 2
                         current_index = item["frame_index"]
-                        
                         test_passed = False
                         if avg_index < midpoint: # Avg is in 1st half
-                            # New frame must be from the distant 2nd half
-                            if current_index > (avg_index + total_frames) / 2:
-                                test_passed = True
+                            if current_index > (avg_index + total_frames) / 2: test_passed = True
                         else: # Avg is in 2nd half
-                            # New frame must be from the distant 1st half
-                            if current_index < (avg_index / 2):
-                                test_passed = True
-                        
-                        if not test_passed:
-                            continue # Reject: Failed temporal spread test
+                            if current_index < (avg_index / 2): test_passed = True
+                        if not test_passed: continue # Reject: Failed temporal spread test
                     
                     elif selected_count >= 6:
                         continue # Reject: Hard cap of 6 images reached
                 
                 # --- ACCEPT ---
-                # Image passed all filters for its category!
                 top_n_items.append(item)
                 seen_global_hashes.add(current_hash)
                 seen_source_hashes[current_source_video].append(current_hash)
-                
-                # Add to temporal tracking if it's a body category
                 if not is_face_category:
                     seen_source_frame_indices[current_source_video].append(item["frame_index"])
             
             all_final_results[cat_name] = top_n_items
-            
-            # --- Copy Top N Images ---
             dest_folder = SORTED_OUTPUT_DIR / f"{cat_name}{OUTPUT_FOLDER_SUFFIX}"
             
             print(f"Copying {len(top_n_items)} unique top images to {dest_folder}...")
@@ -372,7 +327,6 @@ def main():
             for item in top_n_items:
                 copy2(item["path"], dest_folder / item["file"])
 
-    # --- Save JSON Report ---
     print(f"\nSaving detailed v3 scoring report to {OUTPUT_JSON_FILE}...")
     with open(OUTPUT_JSON_FILE, 'w') as f:
         json.dump(all_final_results, f, indent=2)
