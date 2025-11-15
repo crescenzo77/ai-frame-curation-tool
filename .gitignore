@@ -1,17 +1,15 @@
-# Python
-__pycache__/
-*.pyc
-.venv/
-.env
-
-# Secrets
-service-account-key.json
-*.key
-
-# Data
-# This single line ignores all videos, frames, and outputs.
+# Ignore all user-provided data
 /data/
 
-# OS
+# Ignore the private Google Cloud key
+/docker/service-account-key.json
+
+# Ignore all generated reports and lists
+*.html
+*.txt
+
+# Ignore Python cache and system files
+__pycache__/
+*.pyc
 .DS_Store
 Thumbs.db

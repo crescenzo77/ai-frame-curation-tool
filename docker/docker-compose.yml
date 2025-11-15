@@ -1,0 +1,28 @@
+services:
+  lora_utils:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: lora_utils
+    volumes:
+      # Mounts your local ./data folder to /projects in the container
+      - ../data:/projects
+
+      # Mounts your local ./scripts folder to /scripts in the container
+      - ../scripts:/scripts
+
+      # Mounts your key file from the docker folder
+      - ./service-account-key.json:/key/service-account-key.json
+
+    environment:
+      # Sets the GOOGLE_APPLICATION_CREDENTIALS path inside the container
+      - GOOGLE_APPLICATION_CREDENTIALS=/key/service-account-key.json
+    tty: true
+    stdin_open: true
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu, utility, video]

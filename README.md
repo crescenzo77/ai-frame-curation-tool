@@ -1,44 +1,53 @@
-# AI-Powered Dataset Curation Pipeline
+# AI LoRA Data Curation Pipeline
 
-This project is a complete, containerized pipeline for processing a large, raw pool of video frames into a small, high-quality, and varied dataset for AI model training (e.g., SDXL LoRA).
+This project provides a complete, 6-step data curation pipeline to process a large library of source videos into a small, high-quality, LoRA-ready dataset.
 
-It automatically sifts, sorts, scores, and de-duplicates images to find the best available frames, solving common dataset problems like poor focus, bad framing, and low variety.
+It uses a "Vertical Slice Test" methodology (running on a `data_TEST` folder) to validate the entire pipeline before committing to a full production run.
 
-## Key Features
+## Features
 
-* **Native Frame Extraction:** Extracts frames at their original, native resolution, preserving aspect ratio for multi-aspect training.
-* **2-Stage Smart Sorting:** A highly-configurable `02_sort_dataset.py` script first runs a "permissive" filter to categorize images (face, upper body, full body) and filter out obvious "no-person" shots.
-* **Advanced Focus Scoring:** `03_score_and_rank_v3.py` implements a "v4" scoring model that uses 3 separate ML models (Holistic, Selfie Segmentation, Pose) to find images where the subject's face is the sharpest object in the frame, penalizing images with blurry faces but sharp backgrounds.
-* **3-Stage De-duplication Gauntlet:** Ensures a high-variety dataset by combining three filters:
-    * **Global pHash:** A strict filter to remove near-identical twins.
-    * **Intra-Source pHash:** A laxer filter to ensure visual variety from the *same* video.
-    * **Temporal Quota:** A configurable hard cap (e.g., 6 frames) per video to force selections from different timeline segments.
-* **Automated Captioning:** Includes scripts to auto-caption the final dataset using the Gemini or Vertex AI APIs.
-* **Containerized & Portable:** The entire environment (OpenCV, MediaPipe, PyTorch) is containerized with Docker, making it 100% reproducible.
+* **Step 1:** Video Frame Extraction
+* **Step 2:** Smart Culling with **YOLO-Pose** (and QA reports for rejects)
+* **Step 3:** Subject Masking with **rembg**
+* **Step 4:** Mask-Aware Scoring (filters for sharpness, blurriness, and mask quality)
+* **Step 5:** Automated Background Replacement (pastes subject onto blurred, random backgrounds)
+* **Step 6:** Automated Captioning with **Google Vertex AI** (Gemini)
 
----
+## Requirements
 
-## The Pipeline: How It Works
+* An NVIDIA GPU with CUDA
+* Docker and Docker Compose
+* A Google Cloud Project with the **Vertex AI API** enabled.
+* A Google Cloud Service Account with the **"Vertex AI User"** role.
 
-The scripts are numbered in the order you should run them.
+## Project Setup
 
-1.  **`01_extract_frames.py`:**
-    * **Input:** Raw video files in `/projects/source_videos`.
-    * **Output:** Native-resolution frames in `/projects/source_images`, organized into subfolders.
+1.  **Clone this repository.**
 
-2.  **`02_sort_dataset.py`:**
-    * **Input:** All images in `/projects/source_images`.
-    * **Output:** Images are sorted by pose/shot type (face, upper_body, full_body) into `/projects/sorted_output`. This script's thresholds (like `MIN_POSE_AREA_PERCENT`) can be tuned to be more or less permissive.
+2.  **Add Your Data (in the `data/` folder):**
+    The `data` folder is the main workspace and is ignored by Git. You must create and populate:
+    * `./data/source_videos/`: Add all your `.mp4` source videos here.
+    * `./data/00_background_library/`: Add all your `.jpg` background images here.
+    * `./data/yolov8l-pose.pt`: Download the YOLOv8 Pose model and place the `.pt` file here.
+    * `./data/data_TEST/`: Create this folder and mirror the structure above for your Vertical Slice Test.
 
-3.  **`03_score_and_rank_v3.py`:**
-    * This is the core logic.
-    * **Input:** The sorted images from Step 2.
-    * **Process:** Runs the v4 "Focus-Weighted" scoring and the "3-Stage" de-duplication filter on all candidate images. Saves a complete `scoring_results_v3.json` file.
-    * **Output:** The **Top N** (e.g., Top 60) best, most unique images for each category, copied to new folders (e.g., `/projects/sorted_output/a_face_n_hair_top60_v4_temporal`).
+3.  **Add Your Google Key:**
+    * Download the JSON key for your Service Account.
+    * Rename it to `service-account-key.json`.
+    * Place it inside the `./docker/` folder. The `.gitignore` file will prevent it from being uploaded.
 
-4.  **`04_caption_dataset_*.py`:**
-    * **Input:** The final "Top N" folders.
-    * **Process:** Generates a descriptive caption for each image and saves it as a `.txt` file.
-    * **Output:** A complete, captioned, high-quality dataset ready for AI training.
+4.  **Configure Scripts:**
+    * Open `scripts/05_caption.py` and edit the `default="your trigger, ",` line to your desired trigger words.
 
-*(Your `docker-compose.yml`, `Dockerfile`, etc. in the repo should already be clean and correct.)*
+5.  **Build the Container:**
+    ```bash
+    # From the sdxl-dataset-pipeline root folder:
+    docker compose -f ./docker/docker-compose.yml up -d --build
+    ```
+
+## Workflow: The 6-Step Pipeline
+
+Enter your running container to perform all work.
+
+```bash
+docker compose -f ./docker/docker-compose.yml exec lora_utils /bin/bash
