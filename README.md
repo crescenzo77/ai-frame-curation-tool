@@ -50,7 +50,7 @@ It uses a "Vertical Slice Test" methodology (running on a `data_TEST` folder) to
 
 Enter your running container to perform all work.
 
-```bash
+
 docker compose -f ./docker/docker-compose.yml exec lora_utils /bin/bash
 Inside the container, your data is at /projects and your scripts are at /scripts. Run the scripts in order.
 
