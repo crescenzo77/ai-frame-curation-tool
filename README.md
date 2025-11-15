@@ -19,6 +19,7 @@ It uses a "Vertical Slice Test" methodology (running on a `data_TEST` folder) to
 * Docker and Docker Compose
 * A Google Cloud Project with the **Vertex AI API** enabled.
 * A Google Cloud Service Account with the **"Vertex AI User"** role.
+* Google Cloud billing and payment setup (note: after running a batch of over 60k images at least a half dozen times, I am confident I haven't been billed more than $10 USD).
 
 ## Project Setup
 
